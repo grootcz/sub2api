@@ -52,7 +52,7 @@ func resolveCustomEmailSettingsUpdate(req UpdateSettingsRequest, previous *servi
 	if _, sent := sentFields["custom_email_timeout_seconds"]; sent {
 		out.TimeoutSeconds = service.NormalizeCustomEmailTimeoutSeconds(req.CustomEmailTimeoutSeconds)
 	}
-	if out.Provider == "custom" && (out.BaseURL == "" || (out.Token == "" && !previous.CustomEmailTokenConfigured)) {
+	if out.Provider == service.EmailProviderCustom && (out.BaseURL == "" || (out.Token == "" && !previous.CustomEmailTokenConfigured)) {
 		return out, errors.New("custom_email_base_url and custom_email_token are required when email_provider is custom")
 	}
 	return out, nil

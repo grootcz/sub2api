@@ -3,6 +3,8 @@
 package admin
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -46,8 +48,7 @@ func TestUpdateSettingsCustomEmailKeepsStoredTokenWhenBlank(t *testing.T) {
 }
 
 func TestUpdateSettingsPartialPayloadKeepsCustomEmailSettings(t *testing.T) {
-	stored := storedCustomEmail()
-	h, repo := newStepUpSwitchTestHandler(t, stored)
+	h, repo := newStepUpSwitchTestHandler(t, storedCustomEmail())
 	rec := doUpdateSettings(t, h, map[string]any{"risk_control_enabled": true}, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	for k, v := range storedCustomEmail() {
@@ -66,6 +67,12 @@ func TestUpdateSettingsSwitchBackToSMTPKeepsCustomEmailSettings(t *testing.T) {
 		}
 		require.Equal(t, v, repo.values[k], k)
 	}
+
+	// 再切回 custom，不用重填令牌
+	rec = doUpdateSettings(t, h, map[string]any{"email_provider": "custom"}, nil)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "custom", repo.values[service.SettingKeyEmailProvider])
+	require.Equal(t, "ezm_old", repo.values[service.SettingKeyCustomEmailToken])
 }
 
 func TestUpdateSettingsCustomEmailRequiresBaseURLAndToken(t *testing.T) {
@@ -95,10 +102,12 @@ func TestUpdateSettingsCustomEmailAcceptsStoredToken(t *testing.T) {
 
 func TestUpdateSettingsRejectsInvalidEmailProvider(t *testing.T) {
 	for _, v := range []any{"", "sendgrid", nil} {
-		h, _ := newStepUpSwitchTestHandler(t, map[string]string{})
-		rec := doUpdateSettings(t, h, map[string]any{"email_provider": v}, nil)
-		require.Equal(t, http.StatusBadRequest, rec.Code, "%v", v)
-		require.Contains(t, rec.Body.String(), "email_provider must be one of")
+		t.Run(fmt.Sprintf("%v", v), func(t *testing.T) {
+			h, _ := newStepUpSwitchTestHandler(t, map[string]string{})
+			rec := doUpdateSettings(t, h, map[string]any{"email_provider": v}, nil)
+			require.Equal(t, http.StatusBadRequest, rec.Code)
+			require.Contains(t, rec.Body.String(), "email_provider must be one of")
+		})
 	}
 }
 
@@ -126,10 +135,12 @@ func TestUpdateSettingsCustomEmailTimeoutNormalization(t *testing.T) {
 		want string
 	}{{0, "45"}, {5, "10"}, {60, "60"}, {301, "300"}}
 	for _, tc := range cases {
-		h, repo := newStepUpSwitchTestHandler(t, map[string]string{})
-		rec := doUpdateSettings(t, h, map[string]any{"custom_email_timeout_seconds": tc.in}, nil)
-		require.Equal(t, http.StatusOK, rec.Code)
-		require.Equal(t, tc.want, repo.values[service.SettingKeyCustomEmailTimeoutSeconds], "in=%d", tc.in)
+		t.Run(fmt.Sprintf("in=%d", tc.in), func(t *testing.T) {
+			h, repo := newStepUpSwitchTestHandler(t, map[string]string{})
+			rec := doUpdateSettings(t, h, map[string]any{"custom_email_timeout_seconds": tc.in}, nil)
+			require.Equal(t, http.StatusOK, rec.Code)
+			require.Equal(t, tc.want, repo.values[service.SettingKeyCustomEmailTimeoutSeconds])
+		})
 	}
 }
 
@@ -150,4 +161,25 @@ func TestDiffSettingsCustomEmailChanges(t *testing.T) {
 	for _, n := range names {
 		require.NotContains(t, changed, n)
 	}
+}
+
+func TestResolveCustomEmailSettingsUpdateKeepsUnsentFields(t *testing.T) {
+	previous := &service.SystemSettings{EmailProvider: "custom", CustomEmailBaseURL: "http://10.0.0.5:8081",
+		CustomEmailTokenConfigured: true, CustomEmailFrom: "billing@example.com", CustomEmailTimeoutSeconds: 60}
+	out, err := resolveCustomEmailSettingsUpdate(UpdateSettingsRequest{}, previous, map[string]json.RawMessage{})
+	require.NoError(t, err)
+	require.Equal(t, customEmailSettingsUpdate{Provider: "custom", BaseURL: "http://10.0.0.5:8081", From: "billing@example.com", TimeoutSeconds: 60}, out)
+	after := &service.SystemSettings{EmailProvider: out.Provider, CustomEmailBaseURL: out.BaseURL, CustomEmailFrom: out.From, CustomEmailTimeoutSeconds: out.TimeoutSeconds}
+	changed := diffSettings(previous, after, nil, nil, settingsAuditRequest(UpdateSettingsRequest{CustomEmailToken: " \n"}))
+	for _, name := range []string{"email_provider", "custom_email_base_url", "custom_email_token", "custom_email_from", "custom_email_timeout_seconds"} {
+		require.NotContains(t, changed, name)
+	}
+}
+
+func TestUpdateSettingsCustomEmailValidatesEffectiveProvider(t *testing.T) {
+	h, repo := newStepUpSwitchTestHandler(t, storedCustomEmail())
+	rec := doUpdateSettings(t, h, map[string]any{"custom_email_base_url": ""}, nil)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Contains(t, rec.Body.String(), "required when email_provider is custom")
+	require.Equal(t, "http://10.0.0.5:8081", repo.values[service.SettingKeyCustomEmailBaseURL])
 }
