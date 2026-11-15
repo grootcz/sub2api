@@ -1010,7 +1010,27 @@ export default {
         fromName: '发件人名称',
         fromNamePlaceholder: 'Sub2API',
         useTls: '使用 TLS',
-        useTlsHint: '为 SMTP 连接启用 TLS 加密'
+        useTlsHint: '为 SMTP 连接启用 TLS 加密',
+        provider: '发送方式',
+        providerSmtp: '直连 SMTP',
+        providerCustom: '自定义邮件服务',
+        custom: {
+          baseUrl: '业务地址',
+          baseUrlPlaceholder: 'http://10.0.0.5:8081',
+          baseUrlHint: 'ez-email 后台「服务配置」页的业务地址，末尾不要带 /',
+          token: '访问令牌',
+          tokenPlaceholder: 'ezm_…',
+          tokenHint: '在 ez-email 后台「服务配置」页查看',
+          tokenConfiguredHint: '令牌已配置，留空以保留当前值。',
+          from: '优先发信邮箱',
+          fromPlaceholder: '可不填',
+          fromHint: '须是 ez-email 中已启用的邮箱，实际发信邮箱可能被 ez-email 调整',
+          timeout: '调用超时（秒）',
+          timeoutHint: '不小于 ez-email 后台给出的调用超时，范围 10–300 秒',
+          fromNameNote: '发件人名称由 ez-email 的邮箱配置决定，这里无需设置。',
+          baseUrlRequired: '选择自定义邮件服务时，业务地址必填',
+          tokenRequired: '选择自定义邮件服务时，访问令牌必填'
+        }
       },
       testEmail: {
         title: '发送测试邮件',

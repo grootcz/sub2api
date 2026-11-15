@@ -1015,7 +1015,27 @@ export default {
         fromName: 'From Name',
         fromNamePlaceholder: 'Sub2API',
         useTls: 'Use TLS',
-        useTlsHint: 'Enable TLS encryption for SMTP connection'
+        useTlsHint: 'Enable TLS encryption for SMTP connection',
+        provider: 'Delivery method',
+        providerSmtp: 'Direct SMTP',
+        providerCustom: 'Custom email service',
+        custom: {
+          baseUrl: 'Service URL',
+          baseUrlPlaceholder: 'http://10.0.0.5:8081',
+          baseUrlHint: 'The service URL on the ez-email Service Settings page, without a trailing /',
+          token: 'Access token',
+          tokenPlaceholder: 'ezm_…',
+          tokenHint: 'Find it on the ez-email Service Settings page',
+          tokenConfiguredHint: 'Token configured. Leave empty to keep the current value.',
+          from: 'Preferred sender mailbox',
+          fromPlaceholder: 'Optional',
+          fromHint: 'Must be an enabled mailbox in ez-email; ez-email may still pick another one',
+          timeout: 'Request timeout (seconds)',
+          timeoutHint: 'At least the timeout shown in the ez-email console, 10–300 seconds',
+          fromNameNote: 'The sender name comes from the mailbox settings in ez-email and is not set here.',
+          baseUrlRequired: 'Service URL is required for the custom email service',
+          tokenRequired: 'Access token is required for the custom email service'
+        }
       },
       testEmail: {
         title: 'Send Test Email',
