@@ -56,7 +56,26 @@ func (e *CustomEmailError) outcomePhrase() string {
 	return "email was not sent"
 }
 
+// invalidRecipientError 表示收件人地址非法，请求未发出。
+type invalidRecipientError struct{ reason string }
+
+func (e *invalidRecipientError) Error() string { return e.reason }
+
+func newInvalidRecipientError(err error) error {
+	reason := "address could not be parsed"
+	if inner := errors.Unwrap(err); inner != nil {
+		reason = inner.Error()
+	} else if strings.Contains(err.Error(), "line break") {
+		reason = "address contains a line break"
+	}
+	return &invalidRecipientError{reason: reason}
+}
+
 func (e *CustomEmailError) Error() string {
+	var inv *invalidRecipientError
+	if errors.As(e.Err, &inv) {
+		return fmt.Sprintf("custom email not sent: invalid recipient address: %s; %s", inv.reason, e.outcomePhrase())
+	}
 	if e.HTTPStatus == 0 {
 		return fmt.Sprintf("custom email request failed: %v; %s", e.Err, e.outcomePhrase())
 	}
@@ -133,17 +152,16 @@ var defaultEZEmailClient = newEZEmailClient()
 
 // ezEmailAttempt 是单次 HTTP 尝试的结果。
 type ezEmailAttempt struct {
-	status int
-	body   []byte
-	err    *CustomEmailError // 网络层错误；非 nil 时 status/body 无效
+	status  int
+	body    []byte
+	readErr error
+	err     *CustomEmailError // 网络层错误；非 nil 时 status/body 无效
 }
 
 func newEZEmailRequestID() string {
 	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		// crypto/rand 失败极其罕见；退化为时间戳，仅用于关联日志。
-		return fmt.Sprintf("%032x", time.Now().UnixNano())
-	}
+	// Go 1.24 起 crypto/rand.Read 不会返回错误，失败时直接终止进程。
+	_, _ = rand.Read(b[:])
 	return hex.EncodeToString(b[:])
 }
 
@@ -182,15 +200,12 @@ func (c *ezEmailClient) attempt(ctx context.Context, cfg CustomEmailConfig, requ
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, ezEmailMaxResponseBytes))
-	if err != nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		// 响应头已收到，请求必然已写出。
-		return ezEmailAttempt{err: &CustomEmailError{Outcome: CustomEmailOutcomeUnknown, RequestID: requestID, Err: err}}
-	}
-	return ezEmailAttempt{status: resp.StatusCode, body: body}
+	// 读体出错时保留已读到的部分；200 仍按成功处理（ez-email 已接收这封信）。
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, ezEmailMaxResponseBytes))
+	return ezEmailAttempt{status: resp.StatusCode, body: body, readErr: readErr}
 }
 
-func ezEmailHTTPError(status int, body []byte, requestID string) *CustomEmailError {
+func ezEmailHTTPError(status int, body []byte) *CustomEmailError {
 	var parsed ezEmailErrorBody
 	if err := json.Unmarshal(body, &parsed); err != nil {
 		parsed = ezEmailErrorBody{}
@@ -198,9 +213,6 @@ func ezEmailHTTPError(status int, body []byte, requestID string) *CustomEmailErr
 	outcome := CustomEmailOutcomeNotSent
 	if status == http.StatusGatewayTimeout || (status == http.StatusBadGateway && parsed.Hint == "") {
 		outcome = CustomEmailOutcomeUnknown
-	}
-	if parsed.RequestID == "" {
-		parsed.RequestID = requestID
 	}
 	return &CustomEmailError{
 		Outcome:    outcome,
@@ -225,7 +237,7 @@ func (c *ezEmailClient) jitter() time.Duration {
 func (c *ezEmailClient) Send(ctx context.Context, cfg CustomEmailConfig, to, subject, htmlBody string) (*CustomEmailSendResult, error) {
 	addr, err := parseSMTPAddress(to, "recipient")
 	if err != nil {
-		return nil, &CustomEmailError{Outcome: CustomEmailOutcomeNotSent, Err: err}
+		return nil, &CustomEmailError{Outcome: CustomEmailOutcomeNotSent, Err: newInvalidRecipientError(err)}
 	}
 	reqBody := map[string]any{
 		"to":      []string{addr.Address},
@@ -247,10 +259,10 @@ func (c *ezEmailClient) Send(ctx context.Context, cfg CustomEmailConfig, to, sub
 		if res.err != nil {
 			return nil, res.err
 		}
-		if res.status >= 200 && res.status < 300 {
-			return c.parseSuccess(res.body, requestID, addr.Address), nil
+		if res.status == http.StatusOK {
+			return c.parseSuccess(res.body, res.readErr, requestID, addr.Address), nil
 		}
-		lastErr = ezEmailHTTPError(res.status, res.body, requestID)
+		lastErr = ezEmailHTTPError(res.status, res.body)
 		if res.status != http.StatusServiceUnavailable || lastErr.Code != ezEmailBusyCode || i >= len(c.retryBackoff) {
 			return nil, lastErr
 		}
@@ -261,12 +273,19 @@ func (c *ezEmailClient) Send(ctx context.Context, cfg CustomEmailConfig, to, sub
 			return nil, lastErr
 		case <-timer.C:
 		}
+		if ctx.Err() != nil {
+			return nil, lastErr
+		}
 	}
 }
 
-func (c *ezEmailClient) parseSuccess(body []byte, requestID, recipient string) *CustomEmailSendResult {
+func (c *ezEmailClient) parseSuccess(body []byte, readErr error, requestID, recipient string) *CustomEmailSendResult {
 	result := &CustomEmailSendResult{}
-	if err := json.Unmarshal(body, result); err != nil {
+	err := readErr
+	if err == nil {
+		err = json.Unmarshal(body, result)
+	}
+	if err != nil {
 		slog.Warn("custom email sent but response could not be parsed",
 			"request_id", requestID, "recipient_hash", notificationEmailHash(recipient), "error", err)
 		return &CustomEmailSendResult{}
@@ -286,7 +305,7 @@ func (c *ezEmailClient) Ping(ctx context.Context, cfg CustomEmailConfig) error {
 	if res.err != nil {
 		return fmt.Errorf("cannot reach ez-email: %w", res.err.Err)
 	}
-	httpErr := ezEmailHTTPError(res.status, res.body, "")
+	httpErr := ezEmailHTTPError(res.status, res.body)
 	switch {
 	case res.status == http.StatusBadRequest:
 		return nil

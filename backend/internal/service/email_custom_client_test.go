@@ -117,6 +117,9 @@ func TestEZEmailSendRejectsInvalidRecipientWithoutCalling(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, CustomEmailOutcomeNotSent, asCustomEmailError(t, err).Outcome)
 	require.Len(t, ez.Requests(), 0)
+	require.Contains(t, err.Error(), "invalid recipient address")
+	require.Contains(t, err.Error(), "email was not sent")
+	require.NotContains(t, err.Error(), "SMTP")
 }
 
 func TestEZEmailSendRetriesBusyThenSucceeds(t *testing.T) {
@@ -153,7 +156,9 @@ func TestEZEmailSendStopsRetryingWhenCallerContextDone(t *testing.T) {
 	defer cancel()
 	start := time.Now()
 	_, err := c.Send(ctx, ezCfg(ez.URL()), "user@example.com", "s", "b")
-	require.Error(t, err)
+	ce := asCustomEmailError(t, err)
+	require.Equal(t, "busy", ce.Code)
+	require.Equal(t, CustomEmailOutcomeNotSent, ce.Outcome)
 	require.Len(t, ez.Requests(), 1)
 	require.Less(t, time.Since(start), 500*time.Millisecond)
 }
@@ -195,6 +200,7 @@ func TestEZEmailSendNonJSONErrorKeepsStatus(t *testing.T) {
 	ce := asCustomEmailError(t, err)
 	require.Equal(t, 502, ce.HTTPStatus)
 	require.Equal(t, "", ce.Code)
+	require.Equal(t, "", ce.RequestID)
 }
 
 func TestEZEmailSendLimitsErrorBody(t *testing.T) {
@@ -255,12 +261,14 @@ func TestEZEmailSendAttemptTimeoutIsUnknown(t *testing.T) {
 	cfg.TimeoutSeconds = 50
 	_, err := newTestEZEmailClient().Send(context.Background(), cfg, "user@example.com", "s", "b")
 	require.Equal(t, CustomEmailOutcomeUnknown, asCustomEmailError(t, err).Outcome)
+	require.Contains(t, err.Error(), "result unknown, the email may have been sent")
 }
 
 func TestEZEmailSendConnectionRefusedIsNotSent(t *testing.T) {
 	addr := closedLocalAddr(t)
 	_, err := newTestEZEmailClient().Send(context.Background(), ezCfg("http://"+addr), "user@example.com", "s", "b")
 	require.Equal(t, CustomEmailOutcomeNotSent, asCustomEmailError(t, err).Outcome)
+	require.Contains(t, err.Error(), "email was not sent")
 }
 
 func TestEZEmailPing(t *testing.T) {
@@ -300,4 +308,65 @@ func TestEZEmailPingNetworkError(t *testing.T) {
 	err := newTestEZEmailClient().Ping(context.Background(), ezCfg("http://"+addr))
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "cannot reach ez-email: ")
+}
+
+func TestEZEmailSendTreatsTruncated200BodyAsSuccess(t *testing.T) {
+	var mu sync.Mutex
+	count := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		count++
+		mu.Unlock()
+		w.Header().Set("Content-Length", "100")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":1,"sta`))
+		w.(http.Flusher).Flush()
+		conn, _, err := w.(http.Hijacker).Hijack()
+		if err == nil {
+			_ = conn.Close()
+		}
+	}))
+	defer srv.Close()
+	res, err := newTestEZEmailClient().Send(context.Background(), ezCfg(srv.URL), "user@example.com", "s", "b")
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	mu.Lock()
+	defer mu.Unlock()
+	require.Equal(t, 1, count)
+}
+
+func TestEZEmailSendOnlyAccepts200(t *testing.T) {
+	ez := startFakeEZEmail(t, func(int, fakeEZEmailRequest) (int, string) { return 202, `{}` })
+	_, err := newTestEZEmailClient().Send(context.Background(), ezCfg(ez.URL()), "user@example.com", "s", "b")
+	ce := asCustomEmailError(t, err)
+	require.Equal(t, 202, ce.HTTPStatus)
+	require.Equal(t, CustomEmailOutcomeNotSent, ce.Outcome)
+	require.Len(t, ez.Requests(), 1)
+}
+
+func TestEZEmailSendChecksCallerContextBeforeNextAttempt(t *testing.T) {
+	ez := startFakeEZEmail(t, func(int, fakeEZEmailRequest) (int, string) { return 503, `{"code":"busy"}` })
+	c := newTestEZEmailClient()
+	c.retryBackoff = []time.Duration{0, 0}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := c.Send(ctx, ezCfg(ez.URL()), "user@example.com", "s", "b")
+	ce := asCustomEmailError(t, err)
+	require.Equal(t, "busy", ce.Code)
+	require.Equal(t, CustomEmailOutcomeNotSent, ce.Outcome)
+	require.Len(t, ez.Requests(), 1)
+}
+
+func TestNewEZEmailClientProductionDefaults(t *testing.T) {
+	c := newEZEmailClient()
+	require.Equal(t, []time.Duration{time.Second, 2 * time.Second}, c.retryBackoff)
+	require.Equal(t, 500*time.Millisecond, c.maxJitter)
+	require.Equal(t, time.Second, c.timeoutUnit)
+	tr, ok := c.httpClient.Transport.(*http.Transport)
+	require.True(t, ok)
+	require.Nil(t, tr.Proxy)
+	require.Equal(t, 20*time.Second, tr.IdleConnTimeout)
+	require.Equal(t, 5*time.Second, tr.TLSHandshakeTimeout)
+	require.Equal(t, 5*time.Second, ezEmailDialTimeout)
+	require.Equal(t, http.ErrUseLastResponse, c.httpClient.CheckRedirect(nil, nil))
 }
