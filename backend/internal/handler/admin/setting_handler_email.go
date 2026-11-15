@@ -18,6 +18,8 @@ type TestSMTPRequest struct {
 	SMTPUsername string `json:"smtp_username"`
 	SMTPPassword string `json:"smtp_password"`
 	SMTPUseTLS   *bool  `json:"smtp_use_tls"`
+
+	CustomEmailTestFields
 }
 
 func resolveSMTPUseTLS(requested *bool, savedConfig *service.SMTPConfig) bool {
@@ -33,6 +35,10 @@ func (h *SettingHandler) TestSMTPConnection(c *gin.Context) {
 	var req TestSMTPRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if req.wantsCustomProvider() {
+		h.testCustomEmailConnection(c, req.CustomEmailTestFields)
 		return
 	}
 
@@ -93,6 +99,8 @@ type SendTestEmailRequest struct {
 	SMTPFrom     string `json:"smtp_from_email"`
 	SMTPFromName string `json:"smtp_from_name"`
 	SMTPUseTLS   *bool  `json:"smtp_use_tls"`
+
+	CustomEmailTestFields
 }
 
 // SendTestEmail 发送测试邮件
@@ -101,6 +109,10 @@ func (h *SettingHandler) SendTestEmail(c *gin.Context) {
 	var req SendTestEmailRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if req.wantsCustomProvider() {
+		h.sendCustomTestEmail(c, req.Email, req.CustomEmailTestFields)
 		return
 	}
 
@@ -152,39 +164,7 @@ func (h *SettingHandler) SendTestEmail(c *gin.Context) {
 		UseTLS:   resolveSMTPUseTLS(req.SMTPUseTLS, savedConfig),
 	}
 
-	siteName := h.settingService.GetSiteName(c.Request.Context())
-	subject := "[" + siteName + "] Test Email"
-	body := `
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f5f5f5; margin: 0; padding: 20px; }
-        .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; }
-        .content { padding: 40px 30px; text-align: center; }
-        .success { color: #10b981; font-size: 48px; margin-bottom: 20px; }
-        .footer { background-color: #f8f9fa; padding: 20px; text-align: center; color: #999; font-size: 12px; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>` + html.EscapeString(siteName) + `</h1>
-        </div>
-        <div class="content">
-            <div class="success">✓</div>
-            <h2>Email Configuration Successful!</h2>
-            <p>This is a test email to verify your SMTP settings are working correctly.</p>
-        </div>
-        <div class="footer">
-            <p>This is an automated test message.</p>
-        </div>
-    </div>
-</body>
-</html>
-`
+	subject, body := buildTestEmailContent(h.settingService.GetSiteName(c.Request.Context()))
 
 	if err := h.emailService.SendEmailWithConfig(config, req.Email, subject, body); err != nil {
 		response.BadRequest(c, "Failed to send test email: "+err.Error())
@@ -351,4 +331,41 @@ func emailTemplatePlaceholderUnion(events []service.NotificationEmailEventInfo) 
 		}
 	}
 	return placeholders
+}
+
+// buildTestEmailContent 生成测试邮件的主题与 HTML 正文（SMTP 与自定义邮件服务共用）。
+func buildTestEmailContent(siteName string) (subject, body string) {
+	subject = "[" + siteName + "] Test Email"
+	body = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f5f5f5; margin: 0; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; }
+        .content { padding: 40px 30px; text-align: center; }
+        .success { color: #10b981; font-size: 48px; margin-bottom: 20px; }
+        .footer { background-color: #f8f9fa; padding: 20px; text-align: center; color: #999; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>` + html.EscapeString(siteName) + `</h1>
+        </div>
+        <div class="content">
+            <div class="success">✓</div>
+            <h2>Email Configuration Successful!</h2>
+            <p>This is a test email to verify your SMTP settings are working correctly.</p>
+        </div>
+        <div class="footer">
+            <p>This is an automated test message.</p>
+        </div>
+    </div>
+</body>
+</html>
+`
+	return subject, body
 }

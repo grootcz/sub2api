@@ -5,11 +5,17 @@ package admin
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
 	"testing"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
 
@@ -182,4 +188,132 @@ func TestUpdateSettingsCustomEmailValidatesEffectiveProvider(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 	require.Contains(t, rec.Body.String(), "required when email_provider is custom")
 	require.Equal(t, "http://10.0.0.5:8081", repo.values[service.SettingKeyCustomEmailBaseURL])
+}
+
+func newCustomEmailTestHandler(t *testing.T, stored map[string]string) *SettingHandler {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	repo := &settingHandlerRepoStub{values: stored}
+	svc := service.NewSettingService(repo, &config.Config{Default: config.DefaultConfig{UserConcurrency: 5}})
+	return NewSettingHandler(svc, service.NewEmailService(repo, nil), nil, nil, nil, nil, nil)
+}
+
+func postSettingsJSON(t *testing.T, handle gin.HandlerFunc, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	handle(c)
+	return rec
+}
+
+type fakeEzEmail struct {
+	*httptest.Server
+	mu     sync.Mutex
+	auths  []string
+	bodies []string
+}
+
+func newFakeEzEmail(t *testing.T, status int, respBody string) *fakeEzEmail {
+	t.Helper()
+	f := &fakeEzEmail{}
+	f.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		f.mu.Lock()
+		f.auths = append(f.auths, r.Header.Get("Authorization"))
+		f.bodies = append(f.bodies, string(b))
+		f.mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(respBody))
+	}))
+	t.Cleanup(f.Close)
+	return f
+}
+
+func (f *fakeEzEmail) requests() (auths, bodies []string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.auths...), append([]string(nil), f.bodies...)
+}
+
+func TestTestSMTPConnectionCustomProviderSuccess(t *testing.T) {
+	ez := newFakeEzEmail(t, 400, `{"code":"invalid_request"}`)
+	h := newCustomEmailTestHandler(t, nil)
+	rec := postSettingsJSON(t, h.TestSMTPConnection, fmt.Sprintf(`{"email_provider":"custom","custom_email_base_url":%q,"custom_email_token":"ezm_t"}`, ez.URL))
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "connection successful")
+	auths, bodies := ez.requests()
+	require.Equal(t, []string{"Bearer ezm_t"}, auths)
+	require.Equal(t, []string{"{}"}, bodies)
+}
+
+func TestTestSMTPConnectionCustomProviderFailureReturns400(t *testing.T) {
+	ez := newFakeEzEmail(t, 401, `{"code":"unauthorized"}`)
+	h := newCustomEmailTestHandler(t, nil)
+	rec := postSettingsJSON(t, h.TestSMTPConnection, fmt.Sprintf(`{"email_provider":"custom","custom_email_base_url":%q,"custom_email_token":"ezm_t"}`, ez.URL))
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Contains(t, rec.Body.String(), "access token was rejected")
+}
+
+func TestTestSMTPConnectionCustomProviderUsesSavedTokenForSavedURL(t *testing.T) {
+	ez := newFakeEzEmail(t, 400, `{"code":"invalid_request"}`)
+	h := newCustomEmailTestHandler(t, map[string]string{
+		service.SettingKeyCustomEmailBaseURL: ez.URL,
+		service.SettingKeyCustomEmailToken:   "ezm_saved",
+	})
+	rec := postSettingsJSON(t, h.TestSMTPConnection, `{"email_provider":"custom"}`)
+	require.Equal(t, http.StatusOK, rec.Code)
+	auths, _ := ez.requests()
+	require.Equal(t, []string{"Bearer ezm_saved"}, auths)
+}
+
+func TestTestSMTPConnectionCustomProviderRejectsSavedTokenForNewURL(t *testing.T) {
+	ez := newFakeEzEmail(t, 400, `{"code":"invalid_request"}`)
+	h := newCustomEmailTestHandler(t, map[string]string{
+		service.SettingKeyCustomEmailBaseURL: "http://saved.invalid",
+		service.SettingKeyCustomEmailToken:   "ezm_saved",
+	})
+	rec := postSettingsJSON(t, h.TestSMTPConnection, fmt.Sprintf(`{"email_provider":"custom","custom_email_base_url":%q}`, ez.URL))
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Contains(t, rec.Body.String(), "is required when testing an unsaved")
+	auths, _ := ez.requests()
+	require.Empty(t, auths)
+}
+
+func TestTestSMTPConnectionCustomProviderTrimsTypedToken(t *testing.T) {
+	ez := newFakeEzEmail(t, 400, `{"code":"invalid_request"}`)
+	h := newCustomEmailTestHandler(t, nil)
+	rec := postSettingsJSON(t, h.TestSMTPConnection, fmt.Sprintf(`{"email_provider":"custom","custom_email_base_url":%q,"custom_email_token":" ezm_typed\n"}`, ez.URL))
+	require.Equal(t, http.StatusOK, rec.Code)
+	auths, _ := ez.requests()
+	require.Equal(t, []string{"Bearer ezm_typed"}, auths)
+}
+
+func TestSendTestEmailCustomProviderReturnsDeliveryInfo(t *testing.T) {
+	ez := newFakeEzEmail(t, 200, `{"id":7,"status":"sent","from":"noreply@example.com","message_id":"<m@example.com>"}`)
+	h := newCustomEmailTestHandler(t, nil)
+	rec := postSettingsJSON(t, h.SendTestEmail, fmt.Sprintf(`{"email":"admin@example.com","email_provider":"custom","custom_email_base_url":%q,"custom_email_token":"ezm_t"}`, ez.URL))
+	require.Equal(t, http.StatusOK, rec.Code)
+	var resp struct {
+		Data map[string]any `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Equal(t, "<m@example.com>", resp.Data["message_id"])
+	require.Equal(t, "noreply@example.com", resp.Data["from"])
+	_, bodies := ez.requests()
+	require.Len(t, bodies, 1)
+	var sent struct {
+		To []string `json:"to"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(bodies[0]), &sent))
+	require.Equal(t, []string{"admin@example.com"}, sent.To)
+}
+
+func TestTestSMTPConnectionWithoutProviderKeepsSMTPPath(t *testing.T) {
+	h := newCustomEmailTestHandler(t, nil)
+	rec := postSettingsJSON(t, h.TestSMTPConnection, `{}`)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Contains(t, rec.Body.String(), "SMTP host is required")
 }
