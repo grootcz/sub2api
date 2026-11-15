@@ -8507,7 +8507,44 @@
               </button>
             </div>
             <div class="space-y-6 p-6">
-              <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+              <div>
+                <label
+                  class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                >
+                  {{ t("admin.settings.smtp.provider") }}
+                </label>
+                <div
+                  class="grid grid-cols-2 gap-2 rounded-lg bg-gray-100 p-1 dark:bg-dark-700"
+                >
+                  <button
+                    type="button"
+                    data-testid="email-provider-smtp"
+                    class="inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition"
+                    :class="
+                      form.email_provider !== 'custom'
+                        ? 'bg-white text-primary-700 shadow-sm dark:bg-dark-800 dark:text-primary-300'
+                        : 'text-gray-600 hover:text-gray-900 dark:text-dark-300 dark:hover:text-white'
+                    "
+                    @click="form.email_provider = 'smtp'"
+                  >
+                    {{ t("admin.settings.smtp.providerSmtp") }}
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="email-provider-custom"
+                    class="inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition"
+                    :class="
+                      form.email_provider === 'custom'
+                        ? 'bg-white text-primary-700 shadow-sm dark:bg-dark-800 dark:text-primary-300'
+                        : 'text-gray-600 hover:text-gray-900 dark:text-dark-300 dark:hover:text-white'
+                    "
+                    @click="form.email_provider = 'custom'"
+                  >
+                    {{ t("admin.settings.smtp.providerCustom") }}
+                  </button>
+                </div>
+              </div>
+              <div v-if="form.email_provider !== 'custom'" class="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <div>
                   <label
                     class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
@@ -8608,6 +8645,7 @@
 
               <!-- Use TLS Toggle -->
               <div
+                v-if="form.email_provider !== 'custom'"
                 class="flex items-center justify-between border-t border-gray-100 pt-4 dark:border-dark-700"
               >
                 <div>
@@ -8620,6 +8658,15 @@
                 </div>
                 <Toggle v-model="form.smtp_use_tls" />
               </div>
+              <CustomEmailProviderSettings
+                v-if="form.email_provider === 'custom'"
+                v-model:base-url="form.custom_email_base_url"
+                v-model:token="form.custom_email_token"
+                v-model:token-edited="customEmailTokenManuallyEdited"
+                v-model:from="form.custom_email_from"
+                v-model:timeout-seconds="form.custom_email_timeout_seconds"
+                :token-configured="form.custom_email_token_configured"
+              />
             </div>
           </div>
 
@@ -8956,6 +9003,7 @@ import {
   resolveWeChatConnectModeCapabilities,
 } from "@/api/admin/settings";
 import type {
+  CustomEmailTestFields,
   AuthSourceDefaultsState,
   AuthSourceType,
   SystemSettings,
@@ -9013,6 +9061,7 @@ import {
   stepUpBlockReason,
 } from "@/composables/useStepUp";
 import AdminAccessKeysSettings from "@/components/admin/settings/AdminAccessKeysSettings.vue";
+import CustomEmailProviderSettings from "@/components/admin/settings/CustomEmailProviderSettings.vue";
 import TotpStepUpDialog from "@/components/auth/TotpStepUpDialog.vue";
 import { affiliatesAPI, type AffiliateAdminEntry, type SimpleUser as AffiliateSimpleUser } from "@/api/admin/affiliates";
 import { extractApiErrorMessage, extractI18nErrorMessage } from "@/utils/apiError";
@@ -9137,6 +9186,7 @@ const saving = ref(false);
 const testingSmtp = ref(false);
 const sendingTestEmail = ref(false);
 const smtpPasswordManuallyEdited = ref(false);
+const customEmailTokenManuallyEdited = ref(false);
 const testEmailAddress = ref("");
 const registrationEmailSuffixWhitelistTags = ref<string[]>([]);
 const registrationEmailSuffixWhitelistDraft = ref("");
@@ -9678,6 +9728,7 @@ interface DefaultSubscriptionGroupOption {
 
 type SettingsForm = Omit<
   SystemSettings,
+  | "custom_email_timeout_seconds"
   | "wechat_connect_open_enabled"
   | "wechat_connect_mp_enabled"
   | "wechat_connect_mobile_enabled"
@@ -9688,6 +9739,9 @@ type SettingsForm = Omit<
   channel_monitor_show_quota: boolean;
   channel_monitor_hide_user_ranking: boolean;
   smtp_password: string;
+  custom_email_token: string;
+  /** The number input emits "" while cleared. */
+  custom_email_timeout_seconds: number | string;
   turnstile_secret_key: string;
   tencent_captcha_app_secret_key: string;
   tencent_captcha_cloud_secret_id: string;
@@ -9837,6 +9891,12 @@ const form = reactive<SettingsForm>({
   smtp_from_email: "",
   smtp_from_name: "",
   smtp_use_tls: true,
+  email_provider: "smtp",
+  custom_email_base_url: "",
+  custom_email_token: "",
+  custom_email_token_configured: false,
+  custom_email_from: "",
+  custom_email_timeout_seconds: 45,
   // Cloudflare Turnstile
   turnstile_enabled: false,
   turnstile_site_key: "",
@@ -11100,6 +11160,8 @@ async function loadSettings() {
     registrationEmailSuffixWhitelistDraft.value = "";
     form.smtp_password = "";
     smtpPasswordManuallyEdited.value = false;
+    form.custom_email_token = "";
+    customEmailTokenManuallyEdited.value = false;
     form.turnstile_secret_key = "";
     form.tencent_captcha_app_secret_key = "";
     form.tencent_captcha_cloud_secret_id = "";
@@ -11285,6 +11347,11 @@ const siteBillingModeHint = computed(() =>
 async function saveSettings() {
   saving.value = true;
   try {
+    const customEmailError = customEmailSaveError();
+    if (customEmailError) {
+      appStore.showError(t(customEmailError));
+      return;
+    }
     const normalizedTableDefaultPageSize = Math.floor(
       Number(form.table_default_page_size),
     );
@@ -11501,6 +11568,11 @@ async function saveSettings() {
       smtp_from_email: form.smtp_from_email,
       smtp_from_name: form.smtp_from_name,
       smtp_use_tls: form.smtp_use_tls,
+      email_provider: form.email_provider,
+      custom_email_base_url: form.custom_email_base_url,
+      custom_email_token: form.custom_email_token || undefined,
+      custom_email_from: form.custom_email_from,
+      custom_email_timeout_seconds: normalizedCustomEmailTimeout(),
       turnstile_enabled: form.turnstile_enabled,
       turnstile_site_key: form.turnstile_site_key,
       turnstile_secret_key: form.turnstile_secret_key || undefined,
@@ -11841,6 +11913,8 @@ async function saveSettings() {
     registrationEmailSuffixWhitelistDraft.value = "";
     form.smtp_password = "";
     smtpPasswordManuallyEdited.value = false;
+    form.custom_email_token = "";
+    customEmailTokenManuallyEdited.value = false;
     form.turnstile_secret_key = "";
     form.aliyun_captcha_access_key_secret = "";
     form.linuxdo_connect_client_secret = "";
@@ -11922,26 +11996,76 @@ async function saveSettings() {
   }
 }
 
+function normalizedCustomEmailTimeout(): number {
+  const raw = form.custom_email_timeout_seconds;
+  const value = raw === "" ? NaN : Number(raw);
+  if (!Number.isFinite(value)) return 45;
+  return Math.min(300, Math.max(10, Math.round(value)));
+}
+
+function customEmailSaveError(): string | null {
+  if (form.email_provider !== "custom") return null;
+  if (!form.custom_email_base_url.trim()) {
+    return "admin.settings.smtp.custom.baseUrlRequired";
+  }
+  if (!form.custom_email_token && !form.custom_email_token_configured) {
+    return "admin.settings.smtp.custom.tokenRequired";
+  }
+  return null;
+}
+
+function customEmailTestFields(): CustomEmailTestFields {
+  if (form.email_provider !== "custom") return {};
+  return {
+    email_provider: "custom",
+    custom_email_base_url: form.custom_email_base_url,
+    custom_email_token: customEmailTokenManuallyEdited.value
+      ? form.custom_email_token
+      : "",
+    custom_email_from: form.custom_email_from,
+    custom_email_timeout_seconds: normalizedCustomEmailTimeout(),
+  };
+}
+
 async function testSmtpConnection() {
   testingSmtp.value = true;
   try {
     const smtpPasswordForTest = smtpPasswordManuallyEdited.value
       ? form.smtp_password
       : "";
-    const result = await adminAPI.settings.testSmtpConnection({
+    const isCustom = form.email_provider === "custom";
+    const smtpRequest = {
       smtp_host: form.smtp_host,
       smtp_port: form.smtp_port,
       smtp_username: form.smtp_username,
       smtp_password: smtpPasswordForTest,
       smtp_use_tls: form.smtp_use_tls,
-    });
+    };
+    const result = isCustom
+      ? await adminAPI.settings.testSmtpConnection(
+          { ...smtpRequest, ...customEmailTestFields() },
+          { timeoutMs: (normalizedCustomEmailTimeout() + 15) * 1000 },
+        )
+      : await adminAPI.settings.testSmtpConnection(smtpRequest);
     // API returns { message: "..." } on success, errors are thrown as exceptions
     appStore.showSuccess(
-      result.message || t("admin.settings.smtpConnectionSuccess"),
+      result.message ||
+        t(
+          isCustom
+            ? "admin.settings.customEmailConnectionSuccess"
+            : "admin.settings.smtpConnectionSuccess",
+        ),
     );
   } catch (error: unknown) {
     appStore.showError(
-      extractApiErrorMessage(error, t("admin.settings.failedToTestSmtp")),
+      extractApiErrorMessage(
+        error,
+        t(
+          form.email_provider === "custom"
+            ? "admin.settings.failedToTestCustomEmail"
+            : "admin.settings.failedToTestSmtp",
+        ),
+      ),
     );
   } finally {
     testingSmtp.value = false;
@@ -11959,7 +12083,7 @@ async function sendTestEmail() {
     const smtpPasswordForSend = smtpPasswordManuallyEdited.value
       ? form.smtp_password
       : "";
-    const result = await adminAPI.settings.sendTestEmail({
+    const smtpRequest = {
       email: testEmailAddress.value,
       smtp_host: form.smtp_host,
       smtp_port: form.smtp_port,
@@ -11968,7 +12092,14 @@ async function sendTestEmail() {
       smtp_from_email: form.smtp_from_email,
       smtp_from_name: form.smtp_from_name,
       smtp_use_tls: form.smtp_use_tls,
-    });
+    };
+    const result =
+      form.email_provider === "custom"
+        ? await adminAPI.settings.sendTestEmail(
+            { ...smtpRequest, ...customEmailTestFields() },
+            { timeoutMs: (normalizedCustomEmailTimeout() * 3 + 15) * 1000 },
+          )
+        : await adminAPI.settings.sendTestEmail(smtpRequest);
     // API returns { message: "..." } on success, errors are thrown as exceptions
     appStore.showSuccess(result.message || t("admin.settings.testEmailSent"));
   } catch (error: unknown) {

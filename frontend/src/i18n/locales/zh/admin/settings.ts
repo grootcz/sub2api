@@ -1,7 +1,7 @@
 export default {
     settings: {
       title: '系统设置',
-      description: '管理注册、邮箱验证、默认值和 SMTP 设置',
+      description: '管理注册、邮箱验证、默认值和邮件发送设置',
       tabs: {
         general: '通用设置',
         agreement: '登录条款',
@@ -147,7 +147,7 @@ export default {
         },
       },
       emailTabDisabledTitle: '邮箱验证未启用',
-      emailTabDisabledHint: '请在「安全与认证」选项卡中启用邮箱验证后，再配置 SMTP 设置。',
+      emailTabDisabledHint: '请在「安全与认证」选项卡中启用邮箱验证后，再配置邮件发送设置。',
       registration: {
         title: '注册设置',
         description: '控制用户注册和验证',
@@ -990,8 +990,8 @@ export default {
         enabledHint: '开启后，系统会在订阅到期前 7 天、3 天、1 天各发送一次提醒。'
       },
       smtp: {
-        title: 'SMTP 设置',
-        description: '配置用于发送验证码的邮件服务',
+        title: '邮件发送设置',
+        description: '配置发送业务邮件所用的服务',
         testConnection: '测试连接',
         testing: '测试中...',
         host: 'SMTP 主机',
@@ -1034,7 +1034,7 @@ export default {
       },
       testEmail: {
         title: '发送测试邮件',
-        description: '发送测试邮件以验证 SMTP 配置',
+        description: '发送测试邮件以验证当前的邮件发送配置',
         recipientEmail: '收件人邮箱',
         recipientEmailPlaceholder: "test{'@'}example.com",
         sendTestEmail: '发送测试邮件',
@@ -1355,10 +1355,12 @@ export default {
       saving: '保存中...',
       settingsSaved: '设置保存成功',
       smtpConnectionSuccess: 'SMTP 连接成功',
+      customEmailConnectionSuccess: '自定义邮件服务连接成功',
       testEmailSent: '测试邮件发送成功',
       failedToLoad: '加载设置失败',
       failedToSave: '保存设置失败',
       failedToTestSmtp: 'SMTP 连接测试失败',
+      failedToTestCustomEmail: '自定义邮件服务连接测试失败',
       failedToSendTestEmail: '发送测试邮件失败'
     },
 

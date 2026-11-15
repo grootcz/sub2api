@@ -1,7 +1,7 @@
 export default {
     settings: {
       title: 'System Settings',
-      description: 'Manage registration, email verification, default values, and SMTP settings',
+      description: 'Manage registration, email verification, default values, and email delivery settings',
       tabs: {
         general: 'General',
         agreement: 'Agreement',
@@ -147,7 +147,7 @@ export default {
         },
       },
       emailTabDisabledTitle: 'Email Verification Not Enabled',
-      emailTabDisabledHint: 'Enable email verification in the Security tab to configure SMTP settings.',
+      emailTabDisabledHint: 'Enable email verification in the Security tab to configure email delivery settings.',
       registration: {
         title: 'Registration Settings',
         description: 'Control user registration and verification',
@@ -995,8 +995,8 @@ export default {
         enabledHint: 'When enabled, the system sends reminders 7, 3, and 1 day before expiry.'
       },
       smtp: {
-        title: 'SMTP Settings',
-        description: 'Configure email sending for verification codes',
+        title: 'Email Delivery Settings',
+        description: 'Configure the service used to send business emails',
         testConnection: 'Test Connection',
         testing: 'Testing...',
         host: 'SMTP Host',
@@ -1039,7 +1039,7 @@ export default {
       },
       testEmail: {
         title: 'Send Test Email',
-        description: 'Send a test email to verify your SMTP configuration',
+        description: 'Send a test email to verify the current email delivery settings',
         recipientEmail: 'Recipient Email',
         recipientEmailPlaceholder: "test{'@'}example.com",
         sendTestEmail: 'Send Test Email',
@@ -1361,10 +1361,12 @@ export default {
       saving: 'Saving...',
       settingsSaved: 'Settings saved successfully',
       smtpConnectionSuccess: 'SMTP connection successful',
+      customEmailConnectionSuccess: 'Custom email service connection successful',
       testEmailSent: 'Test email sent successfully',
       failedToLoad: 'Failed to load settings',
       failedToSave: 'Failed to save settings',
       failedToTestSmtp: 'SMTP connection test failed',
+      failedToTestCustomEmail: 'Custom email service connection test failed',
       failedToSendTestEmail: 'Failed to send test email'
     },
 

@@ -36,6 +36,8 @@ const {
   adminSettingsFetch,
   showError,
   showSuccess,
+  testSmtpConnection,
+  sendTestEmail,
 } = vi.hoisted(() => ({
   getSettings: vi.fn(),
   updateSettings: vi.fn(),
@@ -77,6 +79,8 @@ const {
   adminSettingsFetch: vi.fn(),
   showError: vi.fn(),
   showSuccess: vi.fn(),
+  testSmtpConnection: vi.fn(),
+  sendTestEmail: vi.fn(),
 }));
 
 const localeRef = vi.hoisted(() => ({ value: "zh-CN" }));
@@ -97,6 +101,8 @@ vi.mock("@/api", () => ({
       getStreamTimeoutSettings,
       getRectifierSettings,
       getBetaPolicySettings,
+      testSmtpConnection,
+      sendTestEmail,
       getRegistrationEmailBlacklist: vi.fn().mockResolvedValue({ emails: [], max: 20000 }),
     },
     accounts: {
@@ -576,6 +582,16 @@ async function openPaymentTab(wrapper: ReturnType<typeof mountView>) {
 
   expect(paymentTabButton).toBeDefined();
   await paymentTabButton?.trigger("click");
+  await flushPromises();
+}
+
+async function openEmailTab(wrapper: ReturnType<typeof mountView>) {
+  const emailTabButton = wrapper
+    .findAll("button")
+    .find((node) => node.text().includes("admin.settings.tabs.email"));
+
+  expect(emailTabButton).toBeDefined();
+  await emailTabButton?.trigger("click");
   await flushPromises();
 }
 
@@ -2126,5 +2142,213 @@ describe("admin SettingsView platform quota matrix", () => {
     const quotas = payload["default_platform_quotas"] as Record<string, Record<string, unknown>>;
     // 不管输入是什么，提交值应为 null（而非 "" 或 NaN）
     expect(quotas["anthropic"]?.["daily"]).toBe(null);
+  });
+});
+
+describe("admin SettingsView custom email provider", () => {
+  beforeEach(() => {
+    getSettings.mockReset();
+    updateSettings.mockReset();
+    getWebSearchEmulationConfig.mockReset();
+    updateWebSearchEmulationConfig.mockReset();
+    getAdminApiKey.mockReset();
+    getOverloadCooldownSettings.mockReset();
+    getRateLimit429CooldownSettings.mockReset();
+    updateRateLimit429CooldownSettings.mockReset();
+    getStreamTimeoutSettings.mockReset();
+    getRectifierSettings.mockReset();
+    getBetaPolicySettings.mockReset();
+    getUpstreamBillingProbeSettings.mockReset();
+    updateUpstreamBillingProbeSettings.mockReset();
+    getOllamaCloudUsageSettings.mockReset();
+    updateOllamaCloudUsageSettings.mockReset();
+    getGroups.mockReset();
+    listProxies.mockReset();
+    getProviders.mockReset();
+    updateProvider.mockReset();
+    createProvider.mockReset();
+    deleteProvider.mockReset();
+    fetchPublicSettings.mockReset();
+    adminSettingsFetch.mockReset();
+    showError.mockReset();
+    showSuccess.mockReset();
+    localeRef.value = "zh-CN";
+
+    getSettings.mockResolvedValue({ ...baseSettingsResponse });
+    updateSettings.mockImplementation(async (payload) => ({
+      ...baseSettingsResponse,
+      ...payload,
+    }));
+    getWebSearchEmulationConfig.mockResolvedValue({
+      enabled: false,
+      providers: [],
+    });
+    updateWebSearchEmulationConfig.mockResolvedValue({
+      enabled: false,
+      providers: [],
+    });
+    getAdminApiKey.mockResolvedValue({
+      exists: false,
+      masked_key: "",
+    });
+    getOverloadCooldownSettings.mockResolvedValue({
+      enabled: true,
+      cooldown_minutes: 10,
+    });
+    getRateLimit429CooldownSettings.mockResolvedValue({
+      enabled: true,
+      cooldown_seconds: 5,
+    });
+    updateRateLimit429CooldownSettings.mockImplementation(async (payload) => payload);
+    getStreamTimeoutSettings.mockResolvedValue({
+      enabled: true,
+      action: "temp_unsched",
+      temp_unsched_minutes: 5,
+      threshold_count: 3,
+      threshold_window_minutes: 10,
+    });
+    getRectifierSettings.mockResolvedValue({
+      enabled: true,
+      thinking_signature_enabled: true,
+      thinking_budget_enabled: true,
+      apikey_signature_enabled: false,
+      apikey_signature_patterns: [],
+    });
+    getBetaPolicySettings.mockResolvedValue({
+      rules: [],
+    });
+    getUpstreamBillingProbeSettings.mockResolvedValue({
+      enabled: true,
+      interval_minutes: 30,
+    });
+    updateUpstreamBillingProbeSettings.mockImplementation(async (payload) => payload);
+    getOllamaCloudUsageSettings.mockResolvedValue({
+      enabled: false,
+      interval_minutes: 60,
+      debounce_minutes: 1,
+    });
+    updateOllamaCloudUsageSettings.mockImplementation(async (payload) => payload);
+    getGroups.mockResolvedValue([]);
+    listProxies.mockResolvedValue({
+      items: [],
+    });
+    getProviders.mockResolvedValue({
+      data: [],
+    });
+    fetchPublicSettings.mockResolvedValue(undefined);
+    adminSettingsFetch.mockResolvedValue(undefined);
+    testSmtpConnection.mockReset();
+    sendTestEmail.mockReset();
+    testSmtpConnection.mockResolvedValue({ message: "ok" });
+    sendTestEmail.mockResolvedValue({ message: "sent" });
+  });
+
+  const customSettings = {
+    ...baseSettingsResponse,
+    email_verify_enabled: true,
+    email_provider: "custom",
+    custom_email_base_url: "http://10.0.0.5:8081",
+    custom_email_token_configured: true,
+    custom_email_from: "",
+    custom_email_timeout_seconds: 60,
+  };
+  const findButton = (w: ReturnType<typeof mountView>, text: string) =>
+    w.findAll("button").find((b) => b.text().includes(text));
+
+  it("shows custom fields only for the custom provider", async () => {
+    getSettings.mockResolvedValue({ ...baseSettingsResponse, email_verify_enabled: true });
+    const w = mountView();
+    await flushPromises();
+    await openEmailTab(w);
+    expect(w.find('[data-testid="custom-email-base-url"]').exists()).toBe(false);
+    expect(w.find('input[placeholder="admin.settings.smtp.hostPlaceholder"]').exists()).toBe(true);
+    await w.get('[data-testid="email-provider-custom"]').trigger("click");
+    expect(w.find('[data-testid="custom-email-base-url"]').exists()).toBe(true);
+    expect(w.find('input[placeholder="admin.settings.smtp.hostPlaceholder"]').exists()).toBe(false);
+  });
+
+  it("saves custom settings with a normalized timeout and without an empty token", async () => {
+    getSettings.mockResolvedValue(customSettings);
+    const w = mountView();
+    await flushPromises();
+    await openEmailTab(w);
+    await w.get('[data-testid="custom-email-timeout"]').setValue("");
+    await w.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings).toHaveBeenCalledWith(expect.objectContaining({
+      email_provider: "custom",
+      custom_email_base_url: "http://10.0.0.5:8081",
+      custom_email_timeout_seconds: 45,
+    }));
+    expect(updateSettings.mock.calls[0][0].custom_email_token).toBeUndefined();
+  });
+
+  it("blocks saving the custom provider without a service URL", async () => {
+    getSettings.mockResolvedValue({ ...customSettings, custom_email_base_url: "" });
+    const w = mountView();
+    await flushPromises();
+    await w.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings).not.toHaveBeenCalled();
+    expect(showError).toHaveBeenCalledWith("admin.settings.smtp.custom.baseUrlRequired");
+  });
+
+  it("tests the custom connection with custom fields and a longer timeout", async () => {
+    getSettings.mockResolvedValue(customSettings);
+    const w = mountView();
+    await flushPromises();
+    await openEmailTab(w);
+    await findButton(w, "admin.settings.smtp.testConnection")?.trigger("click");
+    await flushPromises();
+    expect(testSmtpConnection).toHaveBeenCalledWith(expect.objectContaining({
+      email_provider: "custom",
+      custom_email_base_url: "http://10.0.0.5:8081",
+      custom_email_token: "",
+      custom_email_timeout_seconds: 60,
+    }), { timeoutMs: 75000 });
+  });
+
+  it("sends the typed token only after it was edited", async () => {
+    getSettings.mockResolvedValue(customSettings);
+    const w = mountView();
+    await flushPromises();
+    await openEmailTab(w);
+    const token = w.get('[data-testid="custom-email-token"]');
+    await token.trigger("keydown");
+    await token.setValue("ezm_typed");
+    await findButton(w, "admin.settings.smtp.testConnection")?.trigger("click");
+    await flushPromises();
+    expect(testSmtpConnection).toHaveBeenCalledWith(
+      expect.objectContaining({ custom_email_token: "ezm_typed" }),
+      expect.anything(),
+    );
+  });
+
+  it("sends a custom test email with a tripled timeout", async () => {
+    getSettings.mockResolvedValue(customSettings);
+    const w = mountView();
+    await flushPromises();
+    await openEmailTab(w);
+    await w
+      .get('input[placeholder="admin.settings.testEmail.recipientEmailPlaceholder"]')
+      .setValue("a@example.com");
+    await findButton(w, "admin.settings.testEmail.sendTestEmail")?.trigger("click");
+    await flushPromises();
+    expect(sendTestEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ email: "a@example.com", email_provider: "custom" }),
+      { timeoutMs: 195000 },
+    );
+  });
+
+  it("keeps SMTP test requests unchanged", async () => {
+    getSettings.mockResolvedValue({ ...baseSettingsResponse, email_verify_enabled: true });
+    const w = mountView();
+    await flushPromises();
+    await openEmailTab(w);
+    await findButton(w, "admin.settings.smtp.testConnection")?.trigger("click");
+    await flushPromises();
+    expect(testSmtpConnection).toHaveBeenCalledTimes(1);
+    expect(testSmtpConnection.mock.calls[0][0]).not.toHaveProperty("email_provider");
+    expect(testSmtpConnection.mock.calls[0][1]).toBeUndefined();
   });
 });
