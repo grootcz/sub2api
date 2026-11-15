@@ -204,6 +204,17 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeySMTPFromName] = settings.SMTPFromName
 	updates[SettingKeySMTPUseTLS] = strconv.FormatBool(settings.SMTPUseTLS)
 
+	// 自定义邮件服务设置（令牌非空才写；发送方式只在取值合法时写入）
+	if provider, ok := ParseEmailProvider(settings.EmailProvider); ok {
+		updates[SettingKeyEmailProvider] = provider
+	}
+	updates[SettingKeyCustomEmailBaseURL] = settings.CustomEmailBaseURL
+	if token := strings.TrimSpace(settings.CustomEmailToken); token != "" {
+		updates[SettingKeyCustomEmailToken] = token
+	}
+	updates[SettingKeyCustomEmailFrom] = settings.CustomEmailFrom
+	updates[SettingKeyCustomEmailTimeoutSeconds] = strconv.Itoa(NormalizeCustomEmailTimeoutSeconds(settings.CustomEmailTimeoutSeconds))
+
 	// Cloudflare Turnstile 设置（只有非空才更新密钥）
 	updates[SettingKeyTurnstileEnabled] = strconv.FormatBool(settings.TurnstileEnabled)
 	updates[SettingKeyTurnstileSiteKey] = settings.TurnstileSiteKey

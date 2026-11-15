@@ -169,6 +169,8 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyForceEmailOnThirdPartySignup:              "false",
 		SettingKeySMTPPort:                                  "587",
 		SettingKeySMTPUseTLS:                                "false",
+		SettingKeyEmailProvider:                             EmailProviderSMTP,
+		SettingKeyCustomEmailTimeoutSeconds:                 strconv.Itoa(CustomEmailDefaultTimeoutSeconds),
 		// Model fallback defaults
 		SettingKeyEnableModelFallback:      "false",
 		SettingKeyFallbackModelAnthropic:   "claude-3-5-sonnet-20241022",
@@ -384,6 +386,21 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 		result.SMTPPort = port
 	} else {
 		result.SMTPPort = 587
+	}
+
+	// 自定义邮件服务（令牌不回填，只标记是否已配置）
+	if provider, err := resolveStoredEmailProvider(settings[SettingKeyEmailProvider]); err == nil {
+		result.EmailProvider = provider
+	} else {
+		result.EmailProvider = EmailProviderSMTP
+	}
+	result.CustomEmailBaseURL = settings[SettingKeyCustomEmailBaseURL]
+	result.CustomEmailTokenConfigured = strings.TrimSpace(settings[SettingKeyCustomEmailToken]) != ""
+	result.CustomEmailFrom = settings[SettingKeyCustomEmailFrom]
+	if timeout, err := strconv.Atoi(settings[SettingKeyCustomEmailTimeoutSeconds]); err == nil {
+		result.CustomEmailTimeoutSeconds = NormalizeCustomEmailTimeoutSeconds(timeout)
+	} else {
+		result.CustomEmailTimeoutSeconds = CustomEmailDefaultTimeoutSeconds
 	}
 
 	if concurrency, err := strconv.Atoi(settings[SettingKeyDefaultConcurrency]); err == nil {
