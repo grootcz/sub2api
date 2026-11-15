@@ -372,6 +372,10 @@ func (s *NotificationEmailService) PreviewTemplate(ctx context.Context, input No
 	return renderNotificationEmail(normalizedEvent, subject, htmlBody, variables, nil)
 }
 
+// notificationEmailDeliveryRecordTimeout bounds the delivery record write after a successful send.
+// The write is detached from caller cancellation so an expired caller context cannot cause a resend.
+const notificationEmailDeliveryRecordTimeout = 5 * time.Second
+
 func (s *NotificationEmailService) Send(ctx context.Context, input NotificationEmailSendInput) error {
 	info, normalizedEvent, err := s.eventInfo(input.Event)
 	if err != nil {
@@ -424,7 +428,9 @@ func (s *NotificationEmailService) Send(ctx context.Context, input NotificationE
 		return notificationEmailDeliveryErr(err)
 	}
 	if deliveryKey != "" {
-		if err := s.settingRepo.Set(ctx, deliveryKey, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		recordCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), notificationEmailDeliveryRecordTimeout)
+		defer cancel()
+		if err := s.settingRepo.Set(recordCtx, deliveryKey, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
 			return err
 		}
 	}
