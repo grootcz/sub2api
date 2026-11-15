@@ -299,7 +299,7 @@ func (c *ezEmailClient) parseSuccess(body []byte, readErr error, requestID, reci
 	return result
 }
 
-// Ping 用空请求体探测连通性与令牌：只试一次，400 视为成功。
+// Ping 用空请求体探测连通性与令牌：只试一次，400 invalid_request 视为成功。
 func (c *ezEmailClient) Ping(ctx context.Context, cfg CustomEmailConfig) error {
 	res := c.attempt(ctx, cfg, newEZEmailRequestID(), []byte("{}"))
 	if res.err != nil {
@@ -307,7 +307,7 @@ func (c *ezEmailClient) Ping(ctx context.Context, cfg CustomEmailConfig) error {
 	}
 	httpErr := ezEmailHTTPError(res.status, res.body)
 	switch {
-	case res.status == http.StatusBadRequest:
+	case res.status == http.StatusBadRequest && httpErr.Code == "invalid_request":
 		return nil
 	case res.status == http.StatusUnauthorized && httpErr.Code == "token_not_configured":
 		return errors.New("ez-email has not generated an access token yet (token_not_configured)")

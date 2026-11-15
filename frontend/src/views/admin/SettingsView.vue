@@ -12000,7 +12000,9 @@ function normalizedCustomEmailTimeout(): number {
   const raw = form.custom_email_timeout_seconds;
   const value = raw === "" ? NaN : Number(raw);
   if (!Number.isFinite(value)) return 45;
-  return Math.min(300, Math.max(10, Math.round(value)));
+  const rounded = Math.round(value);
+  if (rounded <= 0) return 45;
+  return Math.min(300, Math.max(10, rounded));
 }
 
 function customEmailSaveError(): string | null {

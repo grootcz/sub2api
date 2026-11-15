@@ -279,6 +279,8 @@ func TestEZEmailPing(t *testing.T) {
 		contain string
 	}{
 		{"400 ok", 400, `{"code":"invalid_request"}`, ""},
+		{"400 non-json", 400, "<html>400 Bad Request</html>", "unexpected response: HTTP 400"},
+		{"400 other code", 400, `{"code":"something_else"}`, "unexpected response: HTTP 400 something_else"},
 		{"401 unauthorized", 401, `{"code":"unauthorized"}`, "ez-email access token was rejected (unauthorized)"},
 		{"401 token_not_configured", 401, `{"code":"token_not_configured"}`, "ez-email has not generated an access token yet (token_not_configured)"},
 		{"403", 403, `{"code":"forbidden_source"}`, "this server's egress IP is not in the ez-email source IP allowlist (forbidden_source)"},

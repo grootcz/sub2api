@@ -1215,6 +1215,9 @@ func (s *UserService) Delete(ctx context.Context, userID int64) error {
 	return nil
 }
 
+// notifyEmailPostSendWriteTimeout bounds the cache writes performed after a successful send.
+const notifyEmailPostSendWriteTimeout = 5 * time.Second
+
 // SendNotifyEmailCode sends a verification code to the extra notification email.
 func (s *UserService) SendNotifyEmailCode(ctx context.Context, userID int64, email string, emailService *EmailService, cache EmailCache, locale ...string) error {
 	if err := checkNotifyCodeRateLimit(ctx, cache, userID, email); err != nil {
@@ -1232,12 +1235,17 @@ func (s *UserService) SendNotifyEmailCode(ctx context.Context, userID int64, ema
 		return err
 	}
 
-	if err := saveNotifyVerifyCode(ctx, cache, email, code); err != nil {
+	// The send may outlive the caller's ctx (it is not cut off by the caller's deadline),
+	// so the post-send writes use an independent bounded ctx.
+	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), notifyEmailPostSendWriteTimeout)
+	defer cancel()
+
+	if err := saveNotifyVerifyCode(writeCtx, cache, email, code); err != nil {
 		return err
 	}
 
 	// Increment user-level counter after successful save
-	if _, err := cache.IncrNotifyCodeUserRate(ctx, userID, notifyCodeUserRateWindow); err != nil {
+	if _, err := cache.IncrNotifyCodeUserRate(writeCtx, userID, notifyCodeUserRateWindow); err != nil {
 		slog.Error("failed to increment notify code user rate", "user_id", userID, "error", err)
 	}
 

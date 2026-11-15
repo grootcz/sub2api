@@ -41,7 +41,7 @@ func TestNormalizeCustomEmailBaseURL(t *testing.T) {
 		"":                             "",
 		" http://10.0.0.5:8081/ ":      "http://10.0.0.5:8081",
 		"https://ez.example.com/mail/": "https://ez.example.com/mail",
-		"http://[fd00::5]:8081/":       "http://[fd00::5]:8081", // Review Focus #3
+		"http://[fd00::5]:8081/":       "http://[fd00::5]:8081",
 	}
 	for raw, want := range valid {
 		got, err := NormalizeCustomEmailBaseURL(raw)
@@ -77,7 +77,7 @@ func TestSanitizeCustomEmailSubject(t *testing.T) {
 	require.Equal(t, "abc", sanitizeCustomEmailSubject("a\tb\r\nc"))
 	require.Equal(t, "hi", sanitizeCustomEmailSubject("  hi  "))
 	require.Equal(t, "(no subject)", sanitizeCustomEmailSubject("\t\n "))
-	long := sanitizeCustomEmailSubject(strings.Repeat("验", 201)) // Review Focus #2
+	long := sanitizeCustomEmailSubject(strings.Repeat("验", 201))
 	require.Equal(t, 200, utf8.RuneCountInString(long))
 	require.True(t, utf8.ValidString(long))
 }

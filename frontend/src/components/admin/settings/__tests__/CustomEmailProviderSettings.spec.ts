@@ -35,6 +35,12 @@ describe("CustomEmailProviderSettings", () => {
     expect(w.emitted("update:token")?.[0]).toEqual(["ezm_new"]);
   });
 
+  it("renders the token input as a non-autofilled password field", () => {
+    const input = mount(CustomEmailProviderSettings, { props }).get('[data-testid="custom-email-token"]');
+    expect(input.attributes("type")).toBe("password");
+    expect(input.attributes("autocomplete")).toBe("new-password");
+  });
+
   it("emits the timeout as a number, or an empty string when cleared", async () => {
     const w = mount(CustomEmailProviderSettings, { props });
     const input = w.get('[data-testid="custom-email-timeout"]');

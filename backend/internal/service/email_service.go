@@ -567,6 +567,9 @@ func (s *EmailService) SendPasswordResetEmail(ctx context.Context, email, siteNa
 	return nil
 }
 
+// passwordResetCooldownWriteTimeout bounds the cooldown write after a successful send.
+const passwordResetCooldownWriteTimeout = 5 * time.Second
+
 // SendPasswordResetEmailWithCooldown sends password reset email with cooldown check (called by queue worker)
 // This method wraps SendPasswordResetEmail with email cooldown to prevent email bombing
 func (s *EmailService) SendPasswordResetEmailWithCooldown(ctx context.Context, email, siteName, resetURL string, locale ...string) error {
@@ -581,8 +584,11 @@ func (s *EmailService) SendPasswordResetEmailWithCooldown(ctx context.Context, e
 		return err
 	}
 
-	// Set cooldown marker (Redis TTL handles expiration)
-	if err := s.cache.SetPasswordResetEmailCooldown(ctx, email, passwordResetEmailCooldown); err != nil {
+	// Set cooldown marker (Redis TTL handles expiration). The send may outlive the
+	// caller's ctx, so the write uses an independent bounded ctx.
+	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), passwordResetCooldownWriteTimeout)
+	defer cancel()
+	if err := s.cache.SetPasswordResetEmailCooldown(writeCtx, email, passwordResetEmailCooldown); err != nil {
 		slog.Error("failed to set password reset cooldown", "email", email, "error", err)
 	}
 

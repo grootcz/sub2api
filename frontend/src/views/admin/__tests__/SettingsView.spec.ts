@@ -2283,6 +2283,19 @@ describe("admin SettingsView custom email provider", () => {
     expect(updateSettings.mock.calls[0][0].custom_email_token).toBeUndefined();
   });
 
+  it("treats a zero or negative timeout as the default 45 seconds", async () => {
+    getSettings.mockResolvedValue(customSettings);
+    const w = mountView();
+    await flushPromises();
+    await openEmailTab(w);
+    await w.get('[data-testid="custom-email-timeout"]').setValue("0");
+    await w.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings).toHaveBeenCalledWith(expect.objectContaining({
+      custom_email_timeout_seconds: 45,
+    }));
+  });
+
   it("blocks saving the custom provider without a service URL", async () => {
     getSettings.mockResolvedValue({ ...customSettings, custom_email_base_url: "" });
     const w = mountView();

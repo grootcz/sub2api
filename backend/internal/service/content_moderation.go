@@ -1943,6 +1943,9 @@ func (s *ContentModerationService) buildLog(input ContentModerationCheckInput, c
 	}
 }
 
+// contentModerationLogWriteTimeout bounds the log write after side effects (which may send email).
+const contentModerationLogWriteTimeout = 5 * time.Second
+
 func (s *ContentModerationService) persistContentModerationLog(ctx context.Context, cfg *ContentModerationConfig, log *ContentModerationLog, hashText string, recordHash bool, applySideEffects bool) {
 	if s == nil || log == nil {
 		return
@@ -1961,7 +1964,10 @@ func (s *ContentModerationService) persistContentModerationLog(ctx context.Conte
 		s.sendFlaggedNotificationSideEffects(ctx, cfg, log, autoBanJustApplied)
 	}
 	if s.repo != nil {
-		if err := s.repo.CreateLog(ctx, log); err != nil {
+		// Notification sending may outlive the caller's ctx, so the log write uses an independent bounded ctx.
+		writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), contentModerationLogWriteTimeout)
+		defer cancel()
+		if err := s.repo.CreateLog(writeCtx, log); err != nil {
 			slog.Warn("content_moderation.create_log_failed", "user_id", contentModerationEmailUserID(log), "endpoint", log.Endpoint, "action", log.Action, "error", err)
 			return
 		}

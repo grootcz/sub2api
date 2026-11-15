@@ -34,7 +34,7 @@ func TestUpdateSettingsCustomEmailWritesNormalizedValues(t *testing.T) {
 	h, repo := newStepUpSwitchTestHandler(t, map[string]string{})
 	rec := doUpdateSettings(t, h, map[string]any{
 		"email_provider": " Custom ", "custom_email_base_url": " http://10.0.0.5:8081/ ",
-		"custom_email_token": " ezm_abc\n", // Review Focus #1
+		"custom_email_token": " ezm_abc\n",
 		"custom_email_from":  "Billing <billing@example.com>", "custom_email_timeout_seconds": 500,
 	}, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
