@@ -19,6 +19,7 @@ type TestSMTPRequest struct {
 	SMTPPassword string `json:"smtp_password"`
 	SMTPUseTLS   *bool  `json:"smtp_use_tls"`
 
+	// 自定义邮件服务（ez-email）测试字段
 	CustomEmailTestFields
 }
 
@@ -100,6 +101,7 @@ type SendTestEmailRequest struct {
 	SMTPFromName string `json:"smtp_from_name"`
 	SMTPUseTLS   *bool  `json:"smtp_use_tls"`
 
+	// 自定义邮件服务（ez-email）测试字段
 	CustomEmailTestFields
 }
 

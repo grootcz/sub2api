@@ -91,7 +91,7 @@ func (h *SettingHandler) resolveCustomEmailTestConfig(ctx context.Context, f Cus
 	} else {
 		baseURL, err := service.NormalizeCustomEmailBaseURL(requestedURL)
 		if err != nil {
-			return cfg, fmt.Errorf("invalid custom_email_base_url: %w", err)
+			return service.CustomEmailConfig{}, fmt.Errorf("invalid custom_email_base_url: %w", err)
 		}
 		cfg.BaseURL = baseURL
 		urlIsSaved = baseURL == saved.BaseURL
@@ -100,14 +100,14 @@ func (h *SettingHandler) resolveCustomEmailTestConfig(ctx context.Context, f Cus
 	cfg.Token = strings.TrimSpace(f.CustomEmailToken)
 	if cfg.Token == "" {
 		if !urlIsSaved {
-			return cfg, errors.New("custom_email_token is required when testing an unsaved custom_email_base_url")
+			return service.CustomEmailConfig{}, errors.New("custom_email_token is required when testing an unsaved custom_email_base_url")
 		}
 		cfg.Token = saved.Token
 	}
 
 	from, err := service.NormalizeCustomEmailFrom(f.CustomEmailFrom)
 	if err != nil {
-		return cfg, fmt.Errorf("invalid custom_email_from: %w", err)
+		return service.CustomEmailConfig{}, fmt.Errorf("invalid custom_email_from: %w", err)
 	}
 	cfg.From = from
 
@@ -118,10 +118,10 @@ func (h *SettingHandler) resolveCustomEmailTestConfig(ctx context.Context, f Cus
 	cfg.TimeoutSeconds = service.NormalizeCustomEmailTimeoutSeconds(timeout)
 
 	if cfg.BaseURL == "" {
-		return cfg, errors.New("custom_email_base_url is required")
+		return service.CustomEmailConfig{}, errors.New("custom_email_base_url is required")
 	}
 	if cfg.Token == "" {
-		return cfg, errors.New("custom_email_token is required")
+		return service.CustomEmailConfig{}, errors.New("custom_email_token is required")
 	}
 	return cfg, nil
 }
