@@ -1,10 +1,12 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/mail"
 	"net/url"
+	"strconv"
 	"strings"
 	"unicode"
 )
@@ -121,4 +123,63 @@ func sanitizeCustomEmailSubject(subject string) string {
 		cleaned = string(r[:customEmailSubjectMaxRunes])
 	}
 	return cleaned
+}
+
+// getEmailProvider 读取已保存的发送方式；未知值或读取失败时返回错误（不回退 SMTP）。
+func (s *EmailService) getEmailProvider(ctx context.Context) (string, error) {
+	settings, err := s.settingRepo.GetMultiple(ctx, []string{SettingKeyEmailProvider})
+	if err != nil {
+		return "", fmt.Errorf("get email provider setting: %w", err)
+	}
+	return resolveStoredEmailProvider(settings[SettingKeyEmailProvider])
+}
+
+// GetCustomEmailConfig 读出已保存的自定义邮件服务配置，不检查是否完整。
+func (s *EmailService) GetCustomEmailConfig(ctx context.Context) (CustomEmailConfig, error) {
+	settings, err := s.settingRepo.GetMultiple(ctx, []string{
+		SettingKeyCustomEmailBaseURL,
+		SettingKeyCustomEmailToken,
+		SettingKeyCustomEmailFrom,
+		SettingKeyCustomEmailTimeoutSeconds,
+	})
+	if err != nil {
+		return CustomEmailConfig{}, fmt.Errorf("get custom email settings: %w", err)
+	}
+	timeout, _ := strconv.Atoi(strings.TrimSpace(settings[SettingKeyCustomEmailTimeoutSeconds]))
+	return CustomEmailConfig{
+		BaseURL:        strings.TrimRight(strings.TrimSpace(settings[SettingKeyCustomEmailBaseURL]), "/"),
+		Token:          strings.TrimSpace(settings[SettingKeyCustomEmailToken]),
+		From:           strings.TrimSpace(settings[SettingKeyCustomEmailFrom]),
+		TimeoutSeconds: NormalizeCustomEmailTimeoutSeconds(timeout),
+	}, nil
+}
+
+// EnsureEmailConfigured 检查当前发送方式是否已配置；未配置返回 ErrEmailNotConfigured。
+func (s *EmailService) EnsureEmailConfigured(ctx context.Context) error {
+	provider, err := s.getEmailProvider(ctx)
+	if err != nil {
+		return err
+	}
+	if provider == EmailProviderCustom {
+		cfg, err := s.GetCustomEmailConfig(ctx)
+		if err != nil {
+			return err
+		}
+		if cfg.BaseURL == "" || cfg.Token == "" {
+			return ErrEmailNotConfigured
+		}
+		return nil
+	}
+	_, err = s.GetSMTPConfig(ctx)
+	return err
+}
+
+// SendCustomEmailWithConfig 使用指定配置通过 ez-email 发送邮件。
+func (s *EmailService) SendCustomEmailWithConfig(ctx context.Context, cfg CustomEmailConfig, to, subject, body string) (*CustomEmailSendResult, error) {
+	return defaultEZEmailClient.Send(ctx, cfg, to, subject, body)
+}
+
+// TestCustomEmailConnection 使用指定配置测试 ez-email 连接。
+func (s *EmailService) TestCustomEmailConnection(ctx context.Context, cfg CustomEmailConfig) error {
+	return defaultEZEmailClient.Ping(ctx, cfg)
 }

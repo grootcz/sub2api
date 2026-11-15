@@ -185,6 +185,21 @@ func (s *EmailService) GetSMTPConfig(ctx context.Context) (*SMTPConfig, error) {
 
 // SendEmail 发送邮件（使用数据库中保存的配置）
 func (s *EmailService) SendEmail(ctx context.Context, to, subject, body string) error {
+	provider, err := s.getEmailProvider(ctx)
+	if err != nil {
+		return err
+	}
+	if provider == EmailProviderCustom {
+		customConfig, err := s.GetCustomEmailConfig(ctx)
+		if err != nil {
+			return err
+		}
+		if customConfig.BaseURL == "" || customConfig.Token == "" {
+			return ErrEmailNotConfigured
+		}
+		_, err = s.SendCustomEmailWithConfig(ctx, customConfig, to, subject, body)
+		return err
+	}
 	config, err := s.GetSMTPConfig(ctx)
 	if err != nil {
 		return err

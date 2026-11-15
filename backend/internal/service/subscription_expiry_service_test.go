@@ -217,7 +217,7 @@ func TestSubscriptionExpiryService_MissingSMTPSkipsReminderScanAndLogsOncePerInt
 	svc.sendExpiryReminders(context.Background())
 
 	require.Zero(t, repo.listCalls)
-	require.Equal(t, 1, bytes.Count(logs.Bytes(), []byte("SMTP is not configured")))
+	require.Equal(t, 1, bytes.Count(logs.Bytes(), []byte("Email delivery is not configured")))
 }
 
 func TestSubscriptionExpiryService_SMTPConfigReadErrorSkipsReminderScan(t *testing.T) {

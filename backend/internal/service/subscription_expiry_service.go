@@ -170,7 +170,7 @@ func (s *SubscriptionExpiryService) smtpConfigured(ctx context.Context) bool {
 	if s == nil || s.notificationEmailService == nil || s.notificationEmailService.emailService == nil {
 		return false
 	}
-	_, err := s.notificationEmailService.emailService.GetSMTPConfig(ctx)
+	err := s.notificationEmailService.emailService.EnsureEmailConfigured(ctx)
 	if err == nil {
 		return true
 	}
@@ -179,12 +179,12 @@ func (s *SubscriptionExpiryService) smtpConfigured(ctx context.Context) bool {
 		defer s.smtpWarningMu.Unlock()
 		now := time.Now()
 		if s.lastSMTPWarning.IsZero() || now.Sub(s.lastSMTPWarning) >= subscriptionExpiryReminderSMTPWarningInterval {
-			log.Printf("[SubscriptionExpiry] SMTP is not configured; skipping expiry reminders")
+			log.Printf("[SubscriptionExpiry] Email delivery is not configured; skipping expiry reminders")
 			s.lastSMTPWarning = now
 		}
 		return false
 	}
-	log.Printf("[SubscriptionExpiry] Read SMTP configuration failed; skipping expiry reminders: %v", err)
+	log.Printf("[SubscriptionExpiry] Read email delivery configuration failed; skipping expiry reminders: %v", err)
 	return false
 }
 
