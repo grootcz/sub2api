@@ -50,6 +50,13 @@ type UpdateSettingsRequest struct {
 	SMTPFromName string `json:"smtp_from_name"`
 	SMTPUseTLS   bool   `json:"smtp_use_tls"`
 
+	// 自定义邮件服务（ez-email）设置
+	EmailProvider             string `json:"email_provider"`
+	CustomEmailBaseURL        string `json:"custom_email_base_url"`
+	CustomEmailToken          string `json:"custom_email_token"`
+	CustomEmailFrom           string `json:"custom_email_from"`
+	CustomEmailTimeoutSeconds int    `json:"custom_email_timeout_seconds"`
+
 	// Cloudflare Turnstile 设置
 	TurnstileEnabled   bool   `json:"turnstile_enabled"`
 	TurnstileSiteKey   string `json:"turnstile_site_key"`
@@ -487,6 +494,7 @@ func settingsAuditRequest(req UpdateSettingsRequest) UpdateSettingsRequest {
 	req.TencentCaptchaCloudSecretID = strings.TrimSpace(req.TencentCaptchaCloudSecretID)
 	req.TencentCaptchaCloudSecretKey = strings.TrimSpace(req.TencentCaptchaCloudSecretKey)
 	req.AliyunCaptchaAccessKeySecret = strings.TrimSpace(req.AliyunCaptchaAccessKeySecret)
+	req.CustomEmailToken = strings.TrimSpace(req.CustomEmailToken)
 	return req
 }
 
@@ -645,6 +653,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		req.SMTPFrom = previousSettings.SMTPFrom
 		req.SMTPFromName = previousSettings.SMTPFromName
 		req.SMTPUseTLS = previousSettings.SMTPUseTLS
+	}
+
+	customEmail, err := resolveCustomEmailSettingsUpdate(req, previousSettings, sentFields)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
 	}
 
 	turnstileEnabled := req.TurnstileEnabled
@@ -1550,6 +1564,11 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		SMTPFrom:                            req.SMTPFrom,
 		SMTPFromName:                        req.SMTPFromName,
 		SMTPUseTLS:                          req.SMTPUseTLS,
+		EmailProvider:                       customEmail.Provider,
+		CustomEmailBaseURL:                  customEmail.BaseURL,
+		CustomEmailToken:                    customEmail.Token,
+		CustomEmailFrom:                     customEmail.From,
+		CustomEmailTimeoutSeconds:           customEmail.TimeoutSeconds,
 		TurnstileEnabled:                    req.TurnstileEnabled,
 		TurnstileSiteKey:                    req.TurnstileSiteKey,
 		TurnstileSecretKey:                  req.TurnstileSecretKey,
@@ -2219,6 +2238,11 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		SMTPFrom:                                               updatedSettings.SMTPFrom,
 		SMTPFromName:                                           updatedSettings.SMTPFromName,
 		SMTPUseTLS:                                             updatedSettings.SMTPUseTLS,
+		EmailProvider:                                          updatedSettings.EmailProvider,
+		CustomEmailBaseURL:                                     updatedSettings.CustomEmailBaseURL,
+		CustomEmailTokenConfigured:                             updatedSettings.CustomEmailTokenConfigured,
+		CustomEmailFrom:                                        updatedSettings.CustomEmailFrom,
+		CustomEmailTimeoutSeconds:                              updatedSettings.CustomEmailTimeoutSeconds,
 		TurnstileEnabled:                                       updatedSettings.TurnstileEnabled,
 		TurnstileSiteKey:                                       updatedSettings.TurnstileSiteKey,
 		TurnstileSecretKeyConfigured:                           updatedSettings.TurnstileSecretKeyConfigured,

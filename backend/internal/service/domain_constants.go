@@ -253,6 +253,13 @@ const (
 	SettingKeySMTPFromName = "smtp_from_name" // 发件人名称
 	SettingKeySMTPUseTLS   = "smtp_use_tls"   // 是否使用TLS
 
+	// 自定义邮件服务（ez-email）设置
+	SettingKeyEmailProvider             = "email_provider"
+	SettingKeyCustomEmailBaseURL        = "custom_email_base_url"
+	SettingKeyCustomEmailToken          = "custom_email_token"
+	SettingKeyCustomEmailFrom           = "custom_email_from"
+	SettingKeyCustomEmailTimeoutSeconds = "custom_email_timeout_seconds"
+
 	// Cloudflare Turnstile 设置
 	SettingKeyTurnstileEnabled   = "turnstile_enabled"    // 是否启用 Turnstile 验证
 	SettingKeyTurnstileSiteKey   = "turnstile_site_key"   // Turnstile Site Key

@@ -58,6 +58,13 @@ type SystemSettings struct {
 	SMTPFromName           string `json:"smtp_from_name"`
 	SMTPUseTLS             bool   `json:"smtp_use_tls"`
 
+	// 自定义邮件服务（ez-email）
+	EmailProvider              string `json:"email_provider"`
+	CustomEmailBaseURL         string `json:"custom_email_base_url"`
+	CustomEmailTokenConfigured bool   `json:"custom_email_token_configured"`
+	CustomEmailFrom            string `json:"custom_email_from"`
+	CustomEmailTimeoutSeconds  int    `json:"custom_email_timeout_seconds"`
+
 	TurnstileEnabled                       bool     `json:"turnstile_enabled"`
 	TurnstileSiteKey                       string   `json:"turnstile_site_key"`
 	TurnstileSecretKeyConfigured           bool     `json:"turnstile_secret_key_configured"`

@@ -503,6 +503,11 @@ export interface SystemSettings {
   smtp_from_email: string;
   smtp_from_name: string;
   smtp_use_tls: boolean;
+  email_provider: EmailProvider;
+  custom_email_base_url: string;
+  custom_email_token_configured: boolean;
+  custom_email_from: string;
+  custom_email_timeout_seconds: number;
   // Cloudflare Turnstile settings
   turnstile_enabled: boolean;
   turnstile_site_key: string;
@@ -854,6 +859,11 @@ export interface UpdateSettingsRequest {
   smtp_from_email?: string;
   smtp_from_name?: string;
   smtp_use_tls?: boolean;
+  email_provider?: EmailProvider;
+  custom_email_base_url?: string;
+  custom_email_token?: string;
+  custom_email_from?: string;
+  custom_email_timeout_seconds?: number;
   turnstile_enabled?: boolean;
   turnstile_site_key?: string;
   turnstile_secret_key?: string;
@@ -1096,10 +1106,24 @@ export async function updateSettings(
   return data;
 }
 
+export type EmailProvider = "smtp" | "custom";
+
+export interface CustomEmailTestFields {
+  email_provider?: EmailProvider;
+  custom_email_base_url?: string;
+  custom_email_token?: string;
+  custom_email_from?: string;
+  custom_email_timeout_seconds?: number;
+}
+
+export interface SettingsRequestOptions {
+  timeoutMs?: number;
+}
+
 /**
  * Test SMTP connection request
  */
-export interface TestSmtpRequest {
+export interface TestSmtpRequest extends CustomEmailTestFields {
   smtp_host: string;
   smtp_port: number;
   smtp_username: string;
@@ -1114,10 +1138,12 @@ export interface TestSmtpRequest {
  */
 export async function testSmtpConnection(
   config: TestSmtpRequest,
+  options?: SettingsRequestOptions,
 ): Promise<{ message: string }> {
   const { data } = await apiClient.post<{ message: string }>(
     "/admin/settings/test-smtp",
     config,
+    options?.timeoutMs ? { timeout: options.timeoutMs } : undefined,
   );
   return data;
 }
@@ -1125,7 +1151,7 @@ export async function testSmtpConnection(
 /**
  * Send test email request
  */
-export interface SendTestEmailRequest {
+export interface SendTestEmailRequest extends CustomEmailTestFields {
   email: string;
   smtp_host: string;
   smtp_port: number;
@@ -1143,10 +1169,22 @@ export interface SendTestEmailRequest {
  */
 export async function sendTestEmail(
   request: SendTestEmailRequest,
-): Promise<{ message: string }> {
-  const { data } = await apiClient.post<{ message: string }>(
+  options?: SettingsRequestOptions,
+): Promise<{
+  message: string;
+  from?: string;
+  message_id?: string;
+  id?: number;
+}> {
+  const { data } = await apiClient.post<{
+    message: string;
+    from?: string;
+    message_id?: string;
+    id?: number;
+  }>(
     "/admin/settings/send-test-email",
     request,
+    options?.timeoutMs ? { timeout: options.timeoutMs } : undefined,
   );
   return data;
 }

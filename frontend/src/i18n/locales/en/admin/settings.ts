@@ -1,7 +1,7 @@
 export default {
     settings: {
       title: 'System Settings',
-      description: 'Manage registration, email verification, default values, and SMTP settings',
+      description: 'Manage registration, email verification, default values, and email delivery settings',
       tabs: {
         general: 'General',
         agreement: 'Agreement',
@@ -147,7 +147,7 @@ export default {
         },
       },
       emailTabDisabledTitle: 'Email Verification Not Enabled',
-      emailTabDisabledHint: 'Enable email verification in the Security tab to configure SMTP settings.',
+      emailTabDisabledHint: 'Enable email verification in the Security tab to configure email delivery settings.',
       registration: {
         title: 'Registration Settings',
         description: 'Control user registration and verification',
@@ -995,8 +995,8 @@ export default {
         enabledHint: 'When enabled, the system sends reminders 7, 3, and 1 day before expiry.'
       },
       smtp: {
-        title: 'SMTP Settings',
-        description: 'Configure email sending for verification codes',
+        title: 'Email Delivery Settings',
+        description: 'Configure the service used to send business emails',
         testConnection: 'Test Connection',
         testing: 'Testing...',
         host: 'SMTP Host',
@@ -1015,11 +1015,31 @@ export default {
         fromName: 'From Name',
         fromNamePlaceholder: 'Sub2API',
         useTls: 'Use TLS',
-        useTlsHint: 'Enable TLS encryption for SMTP connection'
+        useTlsHint: 'Enable TLS encryption for SMTP connection',
+        provider: 'Delivery method',
+        providerSmtp: 'Direct SMTP',
+        providerCustom: 'Custom email service',
+        custom: {
+          baseUrl: 'Service URL',
+          baseUrlPlaceholder: 'http://10.0.0.5:8081',
+          baseUrlHint: 'The service URL on the ez-email Service Settings page, without a trailing /',
+          token: 'Access token',
+          tokenPlaceholder: 'ezm_…',
+          tokenHint: 'Find it on the ez-email Service Settings page',
+          tokenConfiguredHint: 'Token configured. Leave empty to keep the current value.',
+          from: 'Preferred sender mailbox',
+          fromPlaceholder: 'Optional',
+          fromHint: 'Must be an enabled mailbox in ez-email; ez-email may still pick another one',
+          timeout: 'Request timeout (seconds)',
+          timeoutHint: 'At least the timeout shown in the ez-email console, 10–300 seconds',
+          fromNameNote: 'The sender name comes from the mailbox settings in ez-email and is not set here.',
+          baseUrlRequired: 'Service URL is required for the custom email service',
+          tokenRequired: 'Access token is required for the custom email service'
+        }
       },
       testEmail: {
         title: 'Send Test Email',
-        description: 'Send a test email to verify your SMTP configuration',
+        description: 'Send a test email to verify the current email delivery settings',
         recipientEmail: 'Recipient Email',
         recipientEmailPlaceholder: "test{'@'}example.com",
         sendTestEmail: 'Send Test Email',
@@ -1341,10 +1361,12 @@ export default {
       saving: 'Saving...',
       settingsSaved: 'Settings saved successfully',
       smtpConnectionSuccess: 'SMTP connection successful',
+      customEmailConnectionSuccess: 'Custom email service connection successful',
       testEmailSent: 'Test email sent successfully',
       failedToLoad: 'Failed to load settings',
       failedToSave: 'Failed to save settings',
       failedToTestSmtp: 'SMTP connection test failed',
+      failedToTestCustomEmail: 'Custom email service connection test failed',
       failedToSendTestEmail: 'Failed to send test email'
     },
 

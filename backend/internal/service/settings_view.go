@@ -39,6 +39,14 @@ type SystemSettings struct {
 	SMTPFromName           string
 	SMTPUseTLS             bool
 
+	// 自定义邮件服务（ez-email）设置
+	EmailProvider              string // smtp | custom；解析时空值或未知值显示为 smtp
+	CustomEmailBaseURL         string
+	CustomEmailToken           string // 只用于写入：非空才覆盖已存的值；解析时从不填充
+	CustomEmailTokenConfigured bool
+	CustomEmailFrom            string
+	CustomEmailTimeoutSeconds  int
+
 	TurnstileEnabled                       bool
 	TurnstileSiteKey                       string
 	TurnstileSecretKey                     string
