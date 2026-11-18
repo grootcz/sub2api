@@ -48,7 +48,6 @@ function createPublicSettings(overrides: Partial<PublicSettings> = {}): PublicSe
     github_oauth_enabled: false,
     google_oauth_enabled: false,
     backend_mode_enabled: false,
-    version: '1.0.0',
     balance_low_notify_enabled: false,
     account_quota_notify_enabled: false,
     balance_low_notify_threshold: 0,
@@ -401,7 +400,6 @@ describe('useAppStore', () => {
       windowAny.__APP_CONFIG__ = {
         site_name: 'TestSite',
         site_logo: '/logo.png',
-        version: '1.0.0',
         contact_info: 'test@test.com',
         api_base_url: 'https://api.test.com',
         doc_url: 'https://docs.test.com',
@@ -413,7 +411,6 @@ describe('useAppStore', () => {
       expect(result).toBe(true)
       expect(store.siteName).toBe('TestSite')
       expect(store.siteLogo).toBe('/logo.png')
-      expect(store.siteVersion).toBe('1.0.0')
       expect(store.publicSettingsLoaded).toBe(true)
     })
 

@@ -81,7 +81,6 @@ function buildPublicSettings(overrides: Partial<WeChatPublicSettings> = {}): WeC
     oidc_oauth_enabled: false,
     oidc_oauth_provider_name: 'OIDC',
     backend_mode_enabled: false,
-    version: 'test',
     balance_low_notify_enabled: false,
     account_quota_notify_enabled: false,
     balance_low_notify_threshold: 0,
