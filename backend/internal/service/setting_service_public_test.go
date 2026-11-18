@@ -334,3 +334,17 @@ func TestSettingService_GetPublicSettings_MCPEnabledFollowsExplicitPublicURL(t *
 		require.Contains(t, string(encoded), fmt.Sprintf(`"mcp_enabled":%t`, tc.want))
 	}
 }
+
+// SSR 注入的配置会写进每个页面的 HTML 源码，不能带上版本号字段。
+func TestSettingService_GetPublicSettingsForInjection_OmitsVersion(t *testing.T) {
+	payload, err := NewSettingService(&settingPublicRepoStub{values: map[string]string{}}, &config.Config{}).
+		GetPublicSettingsForInjection(context.Background())
+	require.NoError(t, err)
+
+	encoded, err := json.Marshal(payload)
+	require.NoError(t, err)
+
+	var fields map[string]any
+	require.NoError(t, json.Unmarshal(encoded, &fields))
+	require.NotContains(t, fields, "version")
+}

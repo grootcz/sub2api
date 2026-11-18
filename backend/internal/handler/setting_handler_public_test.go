@@ -155,3 +155,29 @@ func TestSettingHandler_GetPublicSettings_ExposesWeChatOAuthModeCapabilities(t *
 	require.True(t, resp.Data.WeChatOAuthOpenEnabled)
 	require.True(t, resp.Data.WeChatOAuthMPEnabled)
 }
+
+// 公开设置接口无需登录即可访问，不能对外暴露部署的版本号。
+func TestSettingHandler_GetPublicSettings_OmitsVersion(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	const buildVersion = "9.9.9-version-probe"
+	repo := &settingHandlerPublicRepoStub{values: map[string]string{}}
+	h := NewSettingHandler(service.NewSettingService(repo, &config.Config{}), buildVersion)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/settings/public", nil)
+
+	h.GetPublicSettings(c)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.NotContains(t, recorder.Body.String(), buildVersion)
+
+	var resp struct {
+		Code int            `json:"code"`
+		Data map[string]any `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, 0, resp.Code)
+	require.NotContains(t, resp.Data, "version")
+}

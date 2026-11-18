@@ -123,7 +123,6 @@ type SettingService struct {
 	proxyRepo                   ProxyRepository // for resolving websearch provider proxy URLs
 	cfg                         *config.Config
 	onUpdate                    func() // Callback when settings are updated (for cache invalidation)
-	version                     string // Application version
 	webSearchManagerBuilder     WebSearchManagerBuilder
 	antigravityUAVersionCache   atomic.Value // *cachedAntigravityUserAgentVersion
 	antigravityUAVersionSF      singleflight.Group
@@ -438,11 +437,6 @@ func (s *SettingService) notifyChannelMonitorRuntimeListeners() {
 			fn()
 		}(l)
 	}
-}
-
-// SetVersion sets the application version for injection into public settings
-func (s *SettingService) SetVersion(version string) {
-	s.version = version
 }
 
 // getStringOrDefault 获取字符串值或默认值
